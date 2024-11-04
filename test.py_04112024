@@ -1,0 +1,106 @@
+from django.test import TestCase
+
+# Create your tests here.
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+import unittest
+import time
+
+class StaffUserPermissionsTest(unittest.TestCase):
+    
+    @classmethod
+    def setUpClass(cls):
+        # Configuració del navegador
+        options = webdriver.FirefoxOptions()
+        cls.driver = webdriver.Firefox(options=options)
+        cls.driver.get("http://localhost:8000/admin/login/")
+
+        # Inicia sessió com a administrador per crear l'usuari de prova
+        cls.driver.find_element(By.NAME, "username").send_keys("isard")
+        cls.driver.find_element(By.NAME, "password").send_keys("pirineus")
+        cls.driver.find_element(By.NAME, "password").send_keys(Keys.RETURN)
+
+        # Verifica que l'administrador ha iniciat sessió correctament
+        #assert "Site administration" in cls.driver.page_source
+
+    def test_create_staff_user_with_permissions(self):
+        driver = self.driver
+        
+        # Accedeix a la secció d'Usuaris
+        driver.find_element(By.LINK_TEXT, "Users").click()
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.LINK_TEXT, "Add user")))
+        
+        # Fes clic a "Add user" per crear un nou usuari
+        driver.find_element(By.LINK_TEXT, "Add user").click()
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.NAME, "username")))
+        
+        # Completa el formulari de nou usuari
+        driver.find_element(By.NAME, "username").send_keys("staff")
+        driver.find_element(By.NAME, "password1").send_keys("staff")
+        driver.find_element(By.NAME, "password2").send_keys("staff")
+        driver.find_element(By.NAME, "password2").send_keys(Keys.RETURN)
+        
+        # Assigna permisos de staff
+        driver.find_element(By.NAME, "is_staff").click()
+        
+        # Assigna permisos per veure i crear usuaris
+        driver.find_element(By.ID, "user_permissions").click()
+        driver.find_element(By.XPATH, "//label[contains(text(), 'Can add user')]").click()
+        driver.find_element(By.XPATH, "//label[contains(text(), 'Can view user')]").click()
+        
+        # Guarda el nou usuari
+        driver.find_element(By.NAME, "_save").click()
+        
+        # Verifica que l'usuari s'ha creat correctament
+        self.assertIn("The user “usuari_staff_test” was added successfully.", driver.page_source)
+        
+    def test_staff_user_access(self):
+        driver = self.driver
+        
+        # Tanca la sessió d'administrador
+        driver.find_element(By.LINK_TEXT, "Log out").click()
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.NAME, "username")))
+        
+        # Inicia sessió amb l'usuari staff creat anteriorment
+        driver.find_element(By.NAME, "username").send_keys("staff")
+        driver.find_element(By.NAME, "password").send_keys("staff")
+        driver.find_element(By.NAME, "password").send_keys(Keys.RETURN)
+        
+        # Comprova que pot veure "Users" però no "Questions"
+        time.sleep(2)
+        self.assertIn("Users", driver.page_source)
+        self.assertNotIn("Questions", driver.page_source)
+        
+        # Intenta accedir a la secció de "Users" i crear un altre usuari
+        driver.find_element(By.LINK_TEXT, "Users").click()
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.LINK_TEXT, "Add user")))
+        driver.find_element(By.LINK_TEXT, "Add user").click()
+        WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.NAME, "username")))
+        
+        # Completa el formulari de creació d'un altre usuari
+        driver.find_element(By.NAME, "username").send_keys("usuari1")
+        driver.find_element(By.NAME, "password1").send_keys("usuari1")
+        driver.find_element(By.NAME, "password2").send_keys("usuari1")
+        driver.find_element(By.NAME, "password2").send_keys(Keys.RETURN)
+        
+        # Verifica que l'usuari staff pot crear altres usuaris
+        self.assertIn("The user “usuari1” was added successfully.", driver.page_source)
+
+        # Intenta accedir a la secció de "Questions" (hauria de fallar)
+        driver.get("http://localhost:8000/admin/app_name/question/")
+        time.sleep(2)
+        
+        # Verifica que no té permisos per veure "Questions"
+        self.assertIn("permission denied", driver.page_source.lower())
+
+    @classmethod
+    def tearDownClass(cls):
+        # Tanca el navegador
+        cls.driver.quit()
+
+if __name__ == "__main__":
+    unittest.main()
+
